@@ -79,8 +79,9 @@ def kp_detection(db, nnet, image_root, debug=False, evaluator=None):
             img  = pad_image
             img_h, img_w, _ = img.shape
             pred = pred[pred[:, 0].astype(int) == 1]
-            overlay = img.copy()
-            color = (0, 255, 0)
+            # overlay = img.copy()
+            overlay = np.zeros_like(img[:,:,0], np.uint8)
+            color = 255
             for i, lane in enumerate(pred):
                 lane = lane[1:]  # remove conf
                 lower, upper = lane[0], lane[1]
@@ -107,7 +108,8 @@ def kp_detection(db, nnet, image_root, debug=False, evaluator=None):
                                 thickness=3)
             # Add lanes overlay
             w = 0.6
-            img = ((1. - w) * img + w * overlay).astype(np.uint8)
+            # img = ((1. - w) * img + w * overlay).astype(np.uint8)
+            img = overlay
 
             # cv2.imwrite(os.path.join(result_dir, image_names[ind][:-4] + '.jpg'), img)
             cv2.imshow('win', img)
