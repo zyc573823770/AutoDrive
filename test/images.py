@@ -18,8 +18,6 @@ from utils import crop_image, normalize_
 
 from sample.vis import *
 
-# python test.py LSTR --testiter 500000 --modality images --image_root ./ --debug
-
 class PostProcess(nn.Module):
     @torch.no_grad()
     def forward(self, outputs, target_sizes):

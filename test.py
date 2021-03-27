@@ -20,6 +20,8 @@ from db.utils.evaluator import Evaluator
 
 torch.backends.cudnn.benchmark = False
 
+# python test.py LSTR --testiter 500000 --modality images --image_root ./ --debug
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Test CornerNet")
     parser.add_argument("cfg_file", help="config file", type=str)
