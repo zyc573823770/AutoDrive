@@ -8,6 +8,7 @@ import time
 from copy import deepcopy
 import win32gui
 import math
+import matplotlib.pyplot as plt
 
 import cv2
 import numpy as np
@@ -24,6 +25,7 @@ import keys
 torch.backends.cudnn.benchmark = False
 GREEN = [0, 255, 0]
 WHITE = [255, 255, 255]
+RED = [0, 0, 255]
 
 def PostProcess(outputs, target_sizes):
     out_logits, out_curves = outputs['pred_logits'], outputs['pred_curves']
@@ -133,9 +135,8 @@ if __name__ == "__main__":
     move_window(hwnd, 10, 10, 650, 650, True)
     bbox = (40,119,840,719)
 
-    # gta的图片校正
-
     while(True):
+        last_time = time.time()
         image =  np.array(ImageGrab.grab(bbox=bbox))
 
         mix, points_xy = lane_detection(image, mean, std, input_size, nnet, True)
@@ -151,11 +152,34 @@ if __name__ == "__main__":
         # black_bg = cv2.warpPerspective(black_bg, M, (800, 400))
         # print(black_bg.shape)
         new_points = transform_point(points_xy, M)
+        ploynomial = []
+        left_lane = (1000,None)
+        right_lane = (1000,None)
         for lanes in new_points:
+            lanes = lanes[(lanes[:,0]>=0)&(lanes[:,1]>=0)]
+            ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3))
             for xxx,yyy in lanes:
-                if xxx<0 or yyy<0:
-                    continue
-                cv2.circle(black_bg, (xxx, yyy), 1, color=WHITE, thickness=3) 
+                cv2.circle(black_bg, (xxx, yyy), 1, color=WHITE, thickness=3)
+            a,b,c,d = ploynomial[-1]
+
+            abcd = a+b+c+d
+            if abcd<0.5 and (0.5-abcd)<left_lane[0]:
+                left_lane = (0.5-abcd, ploynomial[-1])
+            if 0.5<abcd and (abcd-0.5)<right_lane[0]:
+                right_lane = (abcd-0.5, ploynomial[-1])
+        
+        if left_lane[0]!=1000 and right_lane[0]!=1000:
+
+            for xx in range(400):
+                x = xx/400
+                a,b,c,d = left_lane[1]
+                y1 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                # cv2.circle(black_bg, (y1, xx), 1, color=GREEN, thickness=1)
+                a,b,c,d = right_lane[1]
+                y2 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                # cv2.circle(black_bg, (y2, xx), 1, color=GREEN, thickness=1)
+                cv2.circle(black_bg, (np.floor((y1+y2)/2).astype(np.int32), xx), 1, color=RED, thickness=1)
+            
         cv2.imshow('proce', black_bg)
         black_bg = black_bg[:,200:-200,:]
         black_bg = cv2.resize(black_bg, (90, 90))
@@ -167,6 +191,7 @@ if __name__ == "__main__":
 
         # cv2.imshow('win', lane)
         cv2.imshow('ori', mix)
+        print(time.time()-last_time)
         if cv2.waitKey(25) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             break

@@ -1,6 +1,4 @@
 import numpy as np
 
-a = np.zeros((5,5))
-b = np.ones((3,3))
-a[-3:,-3:] += b
-print(a)
+a = np.arange(20).reshape(10,2)
+print(a[(a[:,0]>15)&(a[:,1]>15)])

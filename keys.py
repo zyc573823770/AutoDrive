@@ -546,10 +546,11 @@ class INPUT(ctypes.Structure):
 
 
 
+
 #example:
 if __name__ == '__main__':
-    sleep(1)
-    keys = Keys()
-    keys.directMouse(buttons=keys.mouse_lb_press)
-    keys.directMouse(100, 100, buttons=keys.mouse_move)
-
+    k = Keys()
+    for i in range(100):
+        k.directKey('a', type=k.key_press)
+        k.directKey('a', type=k.key_release)
+        sleep(0.5)
