@@ -552,5 +552,7 @@ if __name__ == '__main__':
     k = Keys()
     for i in range(100):
         k.directKey('a', type=k.key_press)
-        k.directKey('a', type=k.key_release)
-        sleep(0.5)
+        sleep(0.05)
+        k.directKey('b', type=k.key_release)
+        sleep(0.05)
+
