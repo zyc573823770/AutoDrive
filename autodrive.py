@@ -268,13 +268,15 @@ def main():
             if 0.5<abcd and (abcd-0.5)<right_lane[0]:
                 right_lane = (abcd-0.5, ploynomial[-1])
         
-
+        
+        ratio = 0.9
 
         if left_lane[0]!=1000 and right_lane[0]!=1000:
             aa, bb, cc, dd = (left_lane[1]+right_lane[1])/2
 
+
             if AUTOMODE:
-                steer_dx = pid((aa+bb+cc+dd)*800)
+                steer_dx = pid((aa*ratio**3+bb*ratio**2+cc*ratio+dd)*800)
                 delay_process('steer', (steer_dx,))
             
             for xx in range(400):
@@ -288,9 +290,9 @@ def main():
                 y = np.floor((aa*x**3+bb*x**2+cc*x+dd)*800).astype(np.int32)
                 cv2.circle(black_bg, (np.floor(y).astype(np.int32), xx), 1, color=RED, thickness=1)
         
-        cv2.line(black_bg, (383,390), (383,400), color=ORANGE, thickness=2)
-        cv2.line(black_bg, (400,390), (400,400), color=ORANGE, thickness=2)
-        cv2.line(black_bg, (417,390), (417,400), color=ORANGE, thickness=2)   
+        cv2.line(black_bg, (383,np.floor(400*ratio-10).astype(np.int32)), (383,np.floor(400*ratio).astype(np.int32)), color=ORANGE, thickness=2)
+        cv2.line(black_bg, (400,np.floor(400*ratio-10).astype(np.int32)), (400,np.floor(400*ratio).astype(np.int32)), color=ORANGE, thickness=2)
+        cv2.line(black_bg, (417,np.floor(400*ratio-10).astype(np.int32)), (417,np.floor(400*ratio).astype(np.int32)), color=ORANGE, thickness=2)   
             
         cv2.imshow('proce', black_bg)
         black_bg = black_bg[:,200:-200,:]
