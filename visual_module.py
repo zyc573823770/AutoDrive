@@ -131,8 +131,8 @@ def transform_point(pointxy, M):
 if __name__ == "__main__":
     nnet, input_size, mean, std = get_lane_model()
     # 图片查看的校正
-    hwnd = win32gui.FindWindow(None, "图片查看")
-    move_window(hwnd, 10, 10, 650, 650, True)
+    # hwnd = win32gui.FindWindow(None, "图片查看")
+    # move_window(hwnd, 10, 10, 650, 650, True)
     bbox = (40,119,840,719)
 
     while(True):
