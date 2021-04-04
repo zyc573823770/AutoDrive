@@ -1,32 +1,65 @@
 import argparse
 import importlib
 import json
+import math
 import os
 import pprint
 import sys
-import time
+import threading
 from copy import deepcopy
-import win32gui
-import math
-import matplotlib.pyplot as plt
+from time import sleep, time
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
+import win32gui
 from PIL import Image, ImageGrab
+from pynput import keyboard
+from pynput.mouse import Button, Controller, Listener
 from torch import nn
 
 from config import system_configs
+from keys import Keys
 from nnet.py_factory import NetworkFactory
 from utils import normalize_
-import keys
+from simple_pid import PID
 
 torch.backends.cudnn.benchmark = False
+SPEED = 31
 GREEN = [0, 255, 0]
 WHITE = [255, 255, 255]
 RED = [0, 0, 255]
 ORANGE = [0, 127, 255]
+ctr = Keys()
+SHUTDOWN = False
+AUTOMODE = False
+XX, YY, ZZ = 1,1,1
+KP, KI, KD = 1, 1, 1
+
+def stop():
+    global SPEED
+    ctr.directKey('s')
+    sleep(0.01*SPEED+0.3)
+    ctr.directKey('s', ctr.key_release)
+
+def steer(dx):
+    global ctr, SPEED
+    dx = dx*SPEED
+    ctr.directMouse(ctr.mouse_lb_release)
+    ctr.directMouse(ctr.mouse_lb_press)
+    ctr.directMouse(dx, 0)
+
+def delay_process(msg, param=()):
+    func = None
+    if msg=='stop':
+        func = stop
+    if msg=='steer':
+        func = steer
+    if func!=None:
+        t = threading.Thread(target=func, args=param)
+        t.start()
 
 def PostProcess(outputs, target_sizes):
     out_logits, out_curves = outputs['pred_logits'], outputs['pred_curves']
@@ -115,9 +148,6 @@ def lane_detection(ori_image, mean, std, input_size, nnet, point=True):
                 overlay_rgb = cv2.line(overlay_rgb, tuple(current_point), tuple(next_point), color=GREEN, thickness=1)
     return overlay_rgb, point_xy
 
-def move_window(hwnd, x, y, n_width, n_height, b_repaint):
-    win32gui.MoveWindow(hwnd, x - 7, y, n_width, n_height, b_repaint)
-
 def transform_point(pointxy, M):
     result = []
     for lanes in pointxy:
@@ -128,67 +158,112 @@ def transform_point(pointxy, M):
         result.append(np.floor(res[:,:2]/res[:,-1][:, np.newaxis]).astype(np.int32))
     return result
 
-if __name__ == "__main__":
+def on_release(key):
+    global AUTOMODE, SHUTDOWN, XX, YY, ZZ
+    try:
+        if key.char=='=': # auto drive on-off
+            if AUTOMODE:
+                AUTOMODE = False
+                print('Automode end!')
+                ctr.directMouse(buttons=ctr.mouse_lb_release)
+                ctr.directKey('w', ctr.key_release)
+                delay_process('stop')
+            else:
+                AUTOMODE = True
+                print('Automode start!')
+                ctr.directMouse(buttons=ctr.mouse_lb_press)
+                ctr.directKey('w')
+        if key.char=='-':
+            ctr.directMouse(buttons=ctr.mouse_lb_release)
+            ctr.directKey('w', ctr.key_release)
+            SHUTDOWN=True
+            return False
+        
+        if key.vk==96+7:
+            XX-=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+9:
+            XX+=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+4:
+            YY-=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+6:
+            YY+=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+1:
+            ZZ-=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+3:
+            ZZ+=1
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+
+    except AttributeError:
+        pass
+
+def main():
+    global SHUTDOWN
     nnet, input_size, mean, std = get_lane_model()
-    # 图片查看的校正
-    # hwnd = win32gui.FindWindow(None, "图片查看")
-    # move_window(hwnd, 10, 10, 650, 650, True)
     bbox = (40,119,840,719)
 
+    pid=PID(KP, KI, KD)
+    keyboard_listener = keyboard.Listener(
+        on_release=on_release,
+    )
+    keyboard_listener.start()
     while(True):
-        last_time = time.time()
+        last_time = time()
         image =  np.array(ImageGrab.grab(bbox=bbox))
 
         mix, points_xy = lane_detection(image, mean, std, input_size, nnet, True)
 
         # original pts
-        pts_o = np.float32([[0, 200], [0, 600], [800, 600], [800, 200]]) # 这四个点为原始图片上数独的位置
-        pts_d = np.float32([[0, 0], [346, 400], [454, 400], [800, 0]]) # 这是变换之后的图上四个点的位置
+        pts_o = np.float32([[0, 200], [0, 600], [800, 600], [800, 200]])
+        pts_d = np.float32([[0, 0], [346, 400], [454, 400], [800, 0]])
 
-        # get transform matrix
         M = cv2.getPerspectiveTransform(pts_o, pts_d)
-        # apply transformation
         black_bg = np.zeros((400, 800, 3), dtype=np.float32)
-        # mix = cv2.warpPerspective(mix, M, (800, 400))
-        # print(black_bg.shape)
         new_points = transform_point(points_xy, M)
+
         ploynomial = []
         left_lane = (1000,None)
         right_lane = (1000,None)
+
         for lanes in new_points:
             if lanes.shape[0]==0:
                 continue
             lanes = lanes[(lanes[:,0]>=0)&(lanes[:,1]>=0)]
-            ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3)) 
-            for xxx,yyy in lanes:
-                cv2.circle(black_bg, (xxx, yyy), 1, color=WHITE, thickness=3)
+            ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3))
             a,b,c,d = ploynomial[-1]
-
             abcd = a+b+c+d
+            
+
             if abcd<0.5 and (0.5-abcd)<left_lane[0]:
                 left_lane = (0.5-abcd, ploynomial[-1])
             if 0.5<abcd and (abcd-0.5)<right_lane[0]:
                 right_lane = (abcd-0.5, ploynomial[-1])
         
+
+
         if left_lane[0]!=1000 and right_lane[0]!=1000:
+            aa, bb, cc, dd = (left_lane[1]+right_lane[1])/2
 
-            a, b, c, d = (left_lane[1]+right_lane[1])/2
-
-            dy = 3*a+2*b+c
-            ddy = 6*a+2*b
-
-            steer = np.power(1+dy**2, 1.5)/np.abs(ddy)
-            print(steer)
+            steer_dx = (aa+bb+cc+dd)*800-400
             
             for xx in range(400):
                 x = xx/400
-                # a,b,c,d = left_lane[1]
-                # y1 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
-                # cv2.circle(black_bg, (y1, xx), 1, color=GREEN, thickness=1)
-                # a,b,c,d = right_lane[1]
-                # y2 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
-                # cv2.circle(black_bg, (y2, xx), 1, color=GREEN, thickness=1)
-                y = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                a,b,c,d = left_lane[1]
+                y1 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                cv2.circle(black_bg, (y1, xx), 1, color=GREEN, thickness=1)
+                a,b,c,d = right_lane[1]
+                y2 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                cv2.circle(black_bg, (y2, xx), 1, color=GREEN, thickness=1)
+                y = np.floor((aa*x**3+bb*x**2+cc*x+dd)*800).astype(np.int32)
                 cv2.circle(black_bg, (np.floor(y).astype(np.int32), xx), 1, color=RED, thickness=1)
         
         cv2.line(black_bg, (383,390), (383,400), color=ORANGE, thickness=2)
@@ -205,8 +280,18 @@ if __name__ == "__main__":
         # mix[40:130,-130:-40,:] = np.clip(mix[40:130,-130:-40,:] + process, None, 255)
 
         # cv2.imshow('win', lane)
+        
+        cv2.putText(mix, 'FPS:{:.2f}'.format(1/(time()-last_time)), (718, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE)
+        
         cv2.imshow('ori', mix)
-        # print(time.time()-last_time)
         if cv2.waitKey(25) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             break
+
+        if SHUTDOWN:
+            cv2.destroyAllWindows()
+            break
+
+if __name__ == "__main__":
+    main()
+    print('Normal exit.')

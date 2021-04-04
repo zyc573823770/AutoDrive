@@ -1,16 +1,9 @@
-import keys
-import 
+from pynput.mouse import Controller, Button, Listener
+from time import sleep
+from pynput import keyboard
+from keys import Keys, ctypes
+import pydirectinput as pyd
+import sys
 
-
-MAX_SPEED = 5
-
-class Car:
-
-    def __init__(self):
-        self.ctr = keys.Keys()
-        self.state = "init"
-        self.speed = 0
-        self.direct = 0
-
-    def 
-
+def speed_ctr_thread():
+    
