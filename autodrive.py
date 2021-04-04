@@ -35,8 +35,8 @@ ORANGE = [0, 127, 255]
 ctr = Keys()
 SHUTDOWN = False
 AUTOMODE = False
-XX, YY, ZZ = 0.1, 0, 0
-KP, KI, KD = 0.1, 0.0001, 1
+XX, YY, ZZ = 0.0005, 0.000008, 0
+KP, KI, KD = 0.00001, 0.000001, 0.000001
 NEW_PID = True
 
 def stop():
@@ -50,10 +50,18 @@ def steer(dx):
     # dx = dx*SPEED
     # ctr.directMouse(ctr.mouse_lb_release)
     # ctr.directMouse(ctr.mouse_lb_press)
-    dx = np.floor(dx).astype(np.int32)
-    print(-dx)
+    # dx = np.floor(dx).astype(np.int32)
+    print(np.abs(dx))
     # sleep(0.1)
-    ctr.directMouse(-dx, 0)
+    # ctr.directMouse(-dx, 0)
+    if -dx<0:
+        ctr.directKey('a')
+        sleep(np.abs(dx))
+        ctr.directKey('a', ctr.key_release)
+    if -dx>0:
+        ctr.directKey('d')
+        sleep(np.abs(dx))
+        ctr.directKey('d', ctr.key_release)
 
 def delay_process(msg, param=()):
     func = None
@@ -200,13 +208,13 @@ def on_release(key):
             if AUTOMODE:
                 AUTOMODE = False
                 print('Automode end!')
-                ctr.directMouse(buttons=ctr.mouse_lb_release)
                 ctr.directKey('w', ctr.key_release)
                 delay_process('stop')
             else:
                 AUTOMODE = True
                 print('Automode start!')
                 ctr.directMouse(buttons=ctr.mouse_lb_press)
+                ctr.directMouse(buttons=ctr.mouse_lb_release)
                 ctr.directKey('w')
 
         # if key.char=='-':
@@ -234,7 +242,7 @@ def main():
     while(True):
         if NEW_PID:
             pid=PID(XX, YY, ZZ, 400)
-            pid.output_limits = (-10, 10)
+            pid.output_limits = (-1, 1)
             NEW_PID=False
             print('set new PID({},{},{})'.format(XX, YY, ZZ))
         last_time = time()
