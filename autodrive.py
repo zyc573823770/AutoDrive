@@ -27,7 +27,7 @@ from utils import normalize_
 from simple_pid import PID
 
 torch.backends.cudnn.benchmark = False
-SPEED = 31
+SPEED = 10
 GREEN = [0, 255, 0]
 WHITE = [255, 255, 255]
 RED = [0, 0, 255]
@@ -35,8 +35,9 @@ ORANGE = [0, 127, 255]
 ctr = Keys()
 SHUTDOWN = False
 AUTOMODE = False
-XX, YY, ZZ = 1,1,1
-KP, KI, KD = 1, 1, 1
+XX, YY, ZZ = 0.1, 0, 0
+KP, KI, KD = 0.1, 0.0001, 1
+NEW_PID = True
 
 def stop():
     global SPEED
@@ -49,7 +50,11 @@ def steer(dx):
     dx = dx*SPEED
     ctr.directMouse(ctr.mouse_lb_release)
     ctr.directMouse(ctr.mouse_lb_press)
-    ctr.directMouse(dx, 0)
+    if np.abs(dx)>30:
+        dx = (dx/np.abs(dx))*30
+    dx = np.floor(dx).astype(np.int32)
+    print(-dx)
+    ctr.directMouse(-dx, 0)
 
 def delay_process(msg, param=()):
     func = None
@@ -158,8 +163,39 @@ def transform_point(pointxy, M):
         result.append(np.floor(res[:,:2]/res[:,-1][:, np.newaxis]).astype(np.int32))
     return result
 
+def on_press(key):
+    global AUTOMODE, SHUTDOWN, XX, YY, ZZ, KP, KI, KD, NEW_PID
+    try:
+        
+        if key.vk==96+7:
+            XX-=KP
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+9:
+            XX+=KP
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+4:
+            YY-=KI
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+6:
+            YY+=KI
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+1:
+            ZZ-=KD
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+        
+        if key.vk==96+3:
+            ZZ+=KD
+            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+
+    except AttributeError:
+        pass
+
 def on_release(key):
-    global AUTOMODE, SHUTDOWN, XX, YY, ZZ
+    global AUTOMODE, SHUTDOWN, XX, YY, ZZ, KP, KI, KD, NEW_PID
     try:
         if key.char=='=': # auto drive on-off
             if AUTOMODE:
@@ -173,50 +209,34 @@ def on_release(key):
                 print('Automode start!')
                 ctr.directMouse(buttons=ctr.mouse_lb_press)
                 ctr.directKey('w')
-        if key.char=='-':
-            ctr.directMouse(buttons=ctr.mouse_lb_release)
-            ctr.directKey('w', ctr.key_release)
-            SHUTDOWN=True
-            return False
-        
-        if key.vk==96+7:
-            XX-=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
-        
-        if key.vk==96+9:
-            XX+=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
-        
-        if key.vk==96+4:
-            YY-=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
-        
-        if key.vk==96+6:
-            YY+=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
-        
-        if key.vk==96+1:
-            ZZ-=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
-        
-        if key.vk==96+3:
-            ZZ+=1
-            print("XX{} YY{} ZZ{}".format(XX, YY, ZZ))
+
+        # if key.char=='-':
+        #     ctr.directMouse(buttons=ctr.mouse_lb_release)
+        #     ctr.directKey('w', ctr.key_release)
+        #     SHUTDOWN=True
+        #     return False
+            
+        if key.vk==96+5:
+            NEW_PID=True
 
     except AttributeError:
         pass
 
 def main():
-    global SHUTDOWN
+    global SHUTDOWN, AUTOMODE, NEW_PID, XX, YY, ZZ
     nnet, input_size, mean, std = get_lane_model()
     bbox = (40,119,840,719)
 
-    pid=PID(KP, KI, KD)
     keyboard_listener = keyboard.Listener(
         on_release=on_release,
+        on_press=on_press
     )
     keyboard_listener.start()
     while(True):
+        if NEW_PID:
+            pid=PID(XX, YY, ZZ)
+            NEW_PID=False
+            print('set new PID({},{},{})'.format(XX, YY, ZZ))
         last_time = time()
         image =  np.array(ImageGrab.grab(bbox=bbox))
 
@@ -235,9 +255,9 @@ def main():
         right_lane = (1000,None)
 
         for lanes in new_points:
+            lanes = lanes[(lanes[:,0]>=0)&(lanes[:,1]>=0)]
             if lanes.shape[0]==0:
                 continue
-            lanes = lanes[(lanes[:,0]>=0)&(lanes[:,1]>=0)]
             ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3))
             a,b,c,d = ploynomial[-1]
             abcd = a+b+c+d
@@ -253,7 +273,10 @@ def main():
         if left_lane[0]!=1000 and right_lane[0]!=1000:
             aa, bb, cc, dd = (left_lane[1]+right_lane[1])/2
 
-            steer_dx = (aa+bb+cc+dd)*800-400
+            if AUTOMODE:
+                steer_dx = (aa+bb+cc+dd)*800-400
+                steer_dx = pid(steer_dx)
+                delay_process('steer', (steer_dx,))
             
             for xx in range(400):
                 x = xx/400
