@@ -26,6 +26,7 @@ torch.backends.cudnn.benchmark = False
 GREEN = [0, 255, 0]
 WHITE = [255, 255, 255]
 RED = [0, 0, 255]
+ORANGE = [0, 127, 255]
 
 def PostProcess(outputs, target_sizes):
     out_logits, out_curves = outputs['pred_logits'], outputs['pred_curves']
@@ -112,7 +113,6 @@ def lane_detection(ori_image, mean, std, input_size, nnet, point=True):
             for current_point, next_point in zip(points[:-1], points[1:]):
                 # overlay = cv2.line(overlay, tuple(current_point), tuple(next_point), color=WHITE, thickness=1)
                 overlay_rgb = cv2.line(overlay_rgb, tuple(current_point), tuple(next_point), color=GREEN, thickness=1)
-
     return overlay_rgb, point_xy
 
 def move_window(hwnd, x, y, n_width, n_height, b_repaint):
@@ -143,13 +143,13 @@ if __name__ == "__main__":
 
         # original pts
         pts_o = np.float32([[0, 200], [0, 600], [800, 600], [800, 200]]) # 这四个点为原始图片上数独的位置
-        pts_d = np.float32([[0, 0], [336, 400], [444, 400], [800, 0]]) # 这是变换之后的图上四个点的位置
+        pts_d = np.float32([[0, 0], [346, 400], [454, 400], [800, 0]]) # 这是变换之后的图上四个点的位置
 
         # get transform matrix
         M = cv2.getPerspectiveTransform(pts_o, pts_d)
         # apply transformation
         black_bg = np.zeros((400, 800, 3), dtype=np.float32)
-        # black_bg = cv2.warpPerspective(black_bg, M, (800, 400))
+        mix = cv2.warpPerspective(mix, M, (800, 400))
         # print(black_bg.shape)
         new_points = transform_point(points_xy, M)
         ploynomial = []
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         right_lane = (1000,None)
         for lanes in new_points:
             lanes = lanes[(lanes[:,0]>=0)&(lanes[:,1]>=0)]
-            ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3))
+            ploynomial.append(np.polyfit(lanes[:,1]/400, lanes[:,0]/800, deg=3)) 
             for xxx,yyy in lanes:
                 cv2.circle(black_bg, (xxx, yyy), 1, color=WHITE, thickness=3)
             a,b,c,d = ploynomial[-1]
@@ -170,15 +170,28 @@ if __name__ == "__main__":
         
         if left_lane[0]!=1000 and right_lane[0]!=1000:
 
+            a, b, c, d = (left_lane[1]+right_lane[1])/2
+
+            dy = 3*a+2*b+c
+            ddy = 6*a+2*b
+
+            steer = np.power(1+dy**2, 1.5)/np.abs(ddy)
+            print(steer)
+            
             for xx in range(400):
                 x = xx/400
-                a,b,c,d = left_lane[1]
-                y1 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                # a,b,c,d = left_lane[1]
+                # y1 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
                 # cv2.circle(black_bg, (y1, xx), 1, color=GREEN, thickness=1)
-                a,b,c,d = right_lane[1]
-                y2 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                # a,b,c,d = right_lane[1]
+                # y2 = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
                 # cv2.circle(black_bg, (y2, xx), 1, color=GREEN, thickness=1)
-                cv2.circle(black_bg, (np.floor((y1+y2)/2).astype(np.int32), xx), 1, color=RED, thickness=1)
+                y = np.floor((a*x**3+b*x**2+c*x+d)*800).astype(np.int32)
+                cv2.circle(black_bg, (np.floor(y).astype(np.int32), xx), 1, color=RED, thickness=1)
+        
+        cv2.line(black_bg, (383,390), (383,400), color=ORANGE, thickness=2)
+        cv2.line(black_bg, (400,390), (400,400), color=ORANGE, thickness=2)
+        cv2.line(black_bg, (417,390), (417,400), color=ORANGE, thickness=2)   
             
         cv2.imshow('proce', black_bg)
         black_bg = black_bg[:,200:-200,:]
@@ -186,12 +199,12 @@ if __name__ == "__main__":
         # mix = cv2.cvtColor(mix, cv2.COLOR_BGR2BGRA)
         # process = cv2.cvtColor(process, cv2.COLOR_BGR2BGRA)
         w = 0.6
-        mix[-130:-40,-130:-40,:] = w*mix[-130:-40,-130:-40,:] + (1-w)*black_bg
+        # mix[-130:-40,-130:-40,:] = w*mix[-130:-40,-130:-40,:] + (1-w)*black_bg
         # mix[40:130,-130:-40,:] = np.clip(mix[40:130,-130:-40,:] + process, None, 255)
 
         # cv2.imshow('win', lane)
         cv2.imshow('ori', mix)
-        print(time.time()-last_time)
+        # print(time.time()-last_time)
         if cv2.waitKey(25) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             break
