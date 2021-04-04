@@ -47,13 +47,12 @@ def stop():
 
 def steer(dx):
     global ctr, SPEED
-    dx = dx*SPEED
-    ctr.directMouse(ctr.mouse_lb_release)
-    ctr.directMouse(ctr.mouse_lb_press)
-    if np.abs(dx)>30:
-        dx = (dx/np.abs(dx))*30
+    # dx = dx*SPEED
+    # ctr.directMouse(ctr.mouse_lb_release)
+    # ctr.directMouse(ctr.mouse_lb_press)
     dx = np.floor(dx).astype(np.int32)
     print(-dx)
+    # sleep(0.1)
     ctr.directMouse(-dx, 0)
 
 def delay_process(msg, param=()):
@@ -234,7 +233,8 @@ def main():
     keyboard_listener.start()
     while(True):
         if NEW_PID:
-            pid=PID(XX, YY, ZZ)
+            pid=PID(XX, YY, ZZ, 400)
+            pid.output_limits = (-10, 10)
             NEW_PID=False
             print('set new PID({},{},{})'.format(XX, YY, ZZ))
         last_time = time()
@@ -274,8 +274,7 @@ def main():
             aa, bb, cc, dd = (left_lane[1]+right_lane[1])/2
 
             if AUTOMODE:
-                steer_dx = (aa+bb+cc+dd)*800-400
-                steer_dx = pid(steer_dx)
+                steer_dx = pid((aa+bb+cc+dd)*800)
                 delay_process('steer', (steer_dx,))
             
             for xx in range(400):
