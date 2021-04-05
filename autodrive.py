@@ -35,8 +35,10 @@ ORANGE = [0, 127, 255]
 ctr = Keys()
 SHUTDOWN = False
 AUTOMODE = False
-XX, YY, ZZ = 0.0005, 0.000008, 0
-KP, KI, KD = 0.00001, 0.000001, 0.000001
+# XX, YY, ZZ = 0.0005, 0, 0
+XX, YY, ZZ = 0, 0, 0
+XX, YY, ZZ = 1e-6, 1e-7, 3e-6
+KP, KI, KD = 0.000001, 0.0000001, 0.0000001
 NEW_PID = True
 
 def stop():
@@ -277,13 +279,14 @@ def main():
                 right_lane = (abcd-0.5, ploynomial[-1])
         
         
-        ratio = 0.9
+        ratio = 1
 
         if left_lane[0]!=1000 and right_lane[0]!=1000:
             aa, bb, cc, dd = (left_lane[1]+right_lane[1])/2
 
 
             if AUTOMODE:
+                # steer_dx = pid((aa*ratio**3+bb*ratio**2+cc*ratio+dd)*800)
                 steer_dx = pid((aa*ratio**3+bb*ratio**2+cc*ratio+dd)*800)
                 delay_process('steer', (steer_dx,))
             
